@@ -37,17 +37,6 @@ checking configuration without running anything.
 
 The release archive contains this single executable and nothing else.
 
-## Install with ocx
-
-```sh
-ocx install ocx.sh/prek/prek
-```
-
-```sh
-# or pin a specific version
-ocx install ocx.sh/prek/prek:0.4.12
-```
-
 `prek` shells out to `git` — it is a Git hook manager — so a `git` executable
 must be on `PATH` for `prek list`, `prek run` and `prek install`.
 
