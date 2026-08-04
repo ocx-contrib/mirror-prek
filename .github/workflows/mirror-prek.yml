@@ -6,7 +6,7 @@ name: prek
 
 on:
   schedule:
-    - cron: '25 */6 * * *'
+    - cron: '47 1-23/6 * * *'
   workflow_dispatch:
   push:
     branches: [main]

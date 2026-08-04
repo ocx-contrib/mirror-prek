@@ -185,7 +185,7 @@ versions:
   # rather than from the recon sheet alone.
   min: "0.4.10"
   new_per_run: 5
-  poll_interval: "25 */6 * * *"
+  poll_interval: "47 1-23/6 * * *"
 
 tests:
   # `script:` resolves from the REPOSITORY ROOT — unlike `metadata.default` and
