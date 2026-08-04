@@ -1,0 +1,126 @@
+# Repo-wide policy for the prek mirror.
+#
+# NOT a spec: it has no name/target/source and is never loaded on its own.
+# Everything a package owns — name, target, source, assets, asset_type,
+# bin_scan, metadata, catalog, tests, versions, announce, annotations — stays
+# in prek/mirror.yml.
+#
+# ⚠️ `extends:` is a SHALLOW merge of top-level keys. A spec that sets a key
+# below replaces that block OUTRIGHT — there is no per-key merge. `platforms:`
+# is where this bites: it carries BOTH the runner matrix and the container
+# legs, so a child that restates it to tweak one runner silently drops every
+# `containers:` entry. Nothing reds — the legs simply stop existing, and every
+# os.features claim in that spec goes back to being merely asserted. This repo
+# is single-package, so `platforms:` lives HERE and prek/mirror.yml does not
+# restate it — the trap is structurally eliminated rather than merely avoided.
+
+skip_prereleases: true
+cascade: true
+
+# New package, so the fleet rule applies unconditionally. A cascade tag
+# (`latest`, `0`, `0.4`) re-points on every re-publish; without a build segment
+# the new manifest reuses the bare version tag and orphans the prior digest for
+# registry GC, breaking any `@sha256:` pin in a consumer's ocx.lock. The `none`
+# exception applies only where upstream versions ALREADY carry semver build
+# metadata — prek tags `vX.Y.Z` with no `+build` segment, so it does not.
+build_timestamp: date
+
+verify:
+  github_asset_digest: true
+
+concurrency:
+  # Assets are ~5.2–6.3 MB gzip tarballs / zips around one fat static Rust
+  # binary (11–15 MB unpacked, stripped) and nothing else.
+  max_downloads: 8
+  max_bundles: 4
+  max_pushes: 2
+  rate_limit_ms: 100
+  max_retries: 3
+  compression_threads: 0
+
+# ─── Platform matrix ────────────────────────────────────────────────────────
+#
+# `os.features` states what an artifact REQUIRES OF THE HOST — it is not a
+# label for how it was built. Measured per arch on BOTH ends of the declared
+# range (v0.4.10 floor and v0.4.12 head); the evidence, command by command,
+# sits above `assets:` in prek/mirror.yml. This mirror carries upstream's
+# `-musl` builds, and on both arches those are FULLY STATIC — `file` says
+# "static-pie linked" (x86_64) / "statically linked" (aarch64), `readelf -l |
+# grep -c INTERP` is 0, `readelf -d | grep -c NEEDED` is 0, and there is not a
+# single GLIBC_* symbol version — so both keys are BARE.
+#
+# `+libc.musl` on either would be a FALSE requirement that hid the package from
+# every glibc host it in fact runs on. A bare key claims universality, so it
+# must prove it: ubuntu (glibc) + alpine (musl) + fedora (a different glibc
+# vintage) on BOTH arches. THE ALPINE LEG IS THE PROOF — drop it and the claim
+# is merely asserted.
+#
+# ─── `containers[].setup` — why git ────────────────────────────────────────
+#
+# prek is a GIT HOOK MANAGER: its very first act on `list` / `run` is to shell
+# out to `git rev-parse --show-toplevel`, and without git it dies at exit 2
+# before reading a single hook. That is a genuine RUNTIME dependency of the
+# artifact, not merely of the test — and `os.features` has no way to express
+# anything beyond libc, so `setup:` is the only place it can be recorded.
+# Measured: none of ubuntu:24.04, alpine:3.20 or fedora:40 ships git (all three
+# answered `command -v git` with nothing, all three run as uid 0), and each
+# one-line install below was verified to yield a working git plus a fully green
+# smoke run against the static musl binary. One command per entry — an embedded
+# newline would split a single Dockerfile RUN into a broken one.
+#
+# Each leg's honest claim is therefore: "runs on stock image X plus git".
+#
+# Staged rollout (skill Phase 10): darwin and windows are pre-written and
+# commented out below AND in prek/mirror.yml's `assets:`, uncommented one pass
+# at a time once the Linux legs are end-to-end green. Both halves are commented
+# together on purpose — a declared-but-unmatched platform still boots a real
+# macOS/Windows runner and reports SUCCESS having tested nothing.
+platforms:
+  linux/amd64:
+    runner: ubuntu-latest
+    containers: &linux_containers
+      - image: "ubuntu:24.04"
+        shell: bash
+        setup:
+          - apt-get update -qq
+          - apt-get install -y --no-install-recommends git
+      - image: "alpine:3.20"
+        shell: sh
+        setup:
+          - apk add --no-cache git
+      - image: "fedora:40"
+        shell: bash
+        setup:
+          - dnf install -y git-core
+  linux/arm64:
+    # arm64 container legs run natively — no qemu — so the runner arch must
+    # match the platform or the renderer reds the leg up front. The container
+    # set is the same three images, aliased rather than copied so the two
+    # arches can never drift apart.
+    runner: ubuntu-24.04-arm
+    containers: *linux_containers
+  # No `containers:` on darwin or windows — those runners have no Linux
+  # container engine, and the key is rejected at spec load. Both ship git
+  # preinstalled on every GitHub-hosted image, so nothing to provision.
+  #
+  # darwin/amd64:
+  #   # Intel slice tested on the arm64 macos-14 runner via Rosetta 2 —
+  #   # GitHub's native macos-13 Intel pool is exhausted and deadlocks push.
+  #   runner: macos-14
+  #   prefix: ["arch", "-x86_64"]
+  # darwin/arm64:
+  #   runner: macos-14
+  #   shell: bash
+  #
+  # windows/amd64:
+  #   runner: windows-latest
+  #   shell: pwsh
+  # windows/arm64:
+  #   # Native arm64 Windows runner — the amd64 pool cannot execute an ARM64 PE.
+  #   runner: windows-11-arm
+  #   shell: pwsh
+
+notify:
+  discord:
+    webhook_secret: OCX_MIRROR_DISCORD_HOOK
+    user_id: "227748867204972545"  # pinged in-message on failures

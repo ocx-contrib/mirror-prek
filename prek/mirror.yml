@@ -1,0 +1,206 @@
+# ⚠ `extends:` is a SHALLOW merge of TOP-LEVEL KEYS. Setting a key here
+# REPLACES the base's block outright — there is no per-key merge. `platforms:`
+# is deliberately NOT restated below: it carries the container legs that make
+# this spec's libc claims honest, and restating it to tweak one runner would
+# drop them all without reddening anything. This repo is single-package, so the
+# measured matrix lives in the base and nothing here touches it.
+extends: ../mirror-base.yml
+
+name: prek
+
+# Logical index package `prek/prek` at the physical path
+# `ghcr.io/ocx-contrib/prek/prek` — slash segments, never hyphen-flattened.
+# Two segments always; `j178` is a personal handle, not a vendor, so the tool
+# names itself. The first segment must be this repo's own GitHub owner:
+# GITHUB_TOKEN only authorises packages owned by the repo the workflow runs in.
+target:
+  registry: ghcr.io
+  repository: ocx-contrib/prek/prek
+
+source:
+  type: github_release
+  owner: j178
+  repo: prek
+  # Tags are v-prefixed bare semver (`v0.4.12`); no other tag scheme appears in
+  # this repo's release history. v0.4.7 was skipped upstream and exists neither
+  # as a release nor as a git tag — a gap in the numbering, not a gap this
+  # mirror has to model.
+  tag_pattern: "^v(?P<version>\\d+\\.\\d+\\.\\d+)$"
+
+# ─── libc gate (Phase 3.5) — the evidence, not the conclusion ───────────────
+#
+# Upstream ships BOTH a glibc-linked gnu build and a musl build for each Linux
+# arch, so the filename decides nothing and `PT_INTERP` decides everything.
+# Measured on the head (v0.4.12) AND the floor (v0.4.10), identical on both:
+#
+#   $ file prek-x86_64-unknown-linux-musl/prek
+#   ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), static-pie linked,
+#   stripped
+#   $ file prek-aarch64-unknown-linux-musl/prek
+#   ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV), statically
+#   linked, stripped
+#   $ readelf -l … | grep -c 'interpreter'  → 0   (musl, both arches, both versions)
+#   $ readelf -d … | grep -c NEEDED         → 0   (musl, both arches, both versions)
+#   $ readelf -V … | grep -o 'GLIBC_[0-9.]*' → (empty, all four)
+#
+#     ⇒ no PT_INTERP, no DT_NEEDED, no glibc symbol versions: the musl artifact
+#       requires NOTHING of the host userland → BARE `linux/amd64` and BARE
+#       `linux/arm64`. `+libc.musl` would be a FALSE requirement, hiding the
+#       package from every glibc host it in fact runs on.
+#
+#   $ file prek-x86_64-unknown-linux-gnu/prek
+#   … dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, for
+#   GNU/Linux 2.6.32 …           (DT_NEEDED: libgcc_s, librt, libpthread,
+#                                 libm, libdl, libc — newest symbol GLIBC_2.16)
+#   $ file prek-aarch64-unknown-linux-gnu/prek
+#   … dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, for
+#   GNU/Linux 4.10.17 …          (newest symbol GLIBC_2.28 — the floors are NOT
+#                                 symmetric across arches, hence per-arch
+#                                 measurement)
+#
+# The gnu builds are therefore real `+libc.glibc` artifacts, and they are
+# DELIBERATELY NOT DECLARED. Per the skill: two keys is the fallback, not the
+# goal — split only where the static build fails to cover the ground. Here it
+# covers it completely: the static musl binary runs under glibc and musl alike,
+# and prek performs no in-process name resolution of its own on the paths this
+# package exercises (it shells out to `git`, which is the host's own binary
+# using the host's own resolver). So `linux/amd64` and `linux/arm64` are each
+# served by ONE artifact rather than two, and the platform count stays at six.
+# Adding `linux/<arch>+libc.glibc` later is strictly additive and breaks
+# nothing: matching is subset-based and specificity-scored, so a glibc host
+# would simply start preferring the gnu build.
+#
+# Non-Linux, for the record (no libc key applies to either):
+#   $ file prek-aarch64-apple-darwin/prek → Mach-O 64-bit arm64 executable
+#   $ file prek-x86_64-apple-darwin/prek  → Mach-O 64-bit x86_64 executable
+#
+# ─── Scope (verified against v0.4.10, v0.4.11 and v0.4.12 — the whole range) ─
+#
+# Every in-range release carries an IDENTICAL 39-asset set, re-listed per tag
+# with `gh api repos/j178/prek/releases/tags/<tag> --jq '.assets[].name'`. Each
+# anchored pattern below matches EXACTLY ONE asset on each of the three. A
+# pattern matching ZERO is silently skipped, not an error — it would yield a
+# green run with a missing platform.
+#
+# ⚠ THE FILENAMES CARRY NO VERSION STRING — `prek-x86_64-unknown-linux-musl
+# .tar.gz` is byte-identical as a name across every tag, so a name check can
+# never catch an upstream that republished the previous build. Two things were
+# verified instead: every `browser_download_url` is tag-scoped
+# (`/releases/download/v0.4.10/…` vs `/releases/download/v0.4.12/…`, different
+# sizes), and each downloaded binary self-reports its own tag —
+# `prek --version` → `prek 0.4.10` and `prek 0.4.12` respectively.
+#
+# End-anchoring is MANDATORY here, not stylistic. cargo-dist pairs EVERY real
+# asset with a `<name>.sha256` sidecar, so an unanchored pattern matches two
+# assets and fails resolution as ambiguous. The releases also carry
+# `sha256.sum`, `dist-manifest.json`, `prek-installer.sh`, `prek-installer.ps1`,
+# `prek.rb` and `source.tar.gz` (+ its own `.sha256`) — the `^prek-` prefix
+# keeps `source.tar.gz` out, and the terminating `\.tar\.gz$` / `\.zip$` keeps
+# every sidecar out.
+#
+# Upstream also publishes, and this mirror deliberately does not carry — none
+# of these has an OCX platform key at all, since the `Architecture` enum is
+# amd64 + arm64 ONLY:
+#   prek-arm-unknown-linux-musleabihf.tar.gz        (armv6-class)
+#   prek-armv7-unknown-linux-{gnueabihf,musleabihf}.tar.gz
+#   prek-i686-unknown-linux-{gnu,musl}.tar.gz       (32-bit x86)
+#   prek-i686-pc-windows-msvc.zip                   (32-bit x86)
+#   prek-riscv64gc-unknown-linux-gnu.tar.gz
+#   prek-s390x-unknown-linux-gnu.tar.gz             (IBM Z)
+# plus the eight `-gnu` Linux tarballs covered by the libc note above.
+assets:
+  # Static musl builds — requires nothing, so a BARE key with no feature suffix.
+  linux/amd64:
+    - "^prek-x86_64-unknown-linux-musl\\.tar\\.gz$"
+  linux/arm64:
+    - "^prek-aarch64-unknown-linux-musl\\.tar\\.gz$"
+  # Staged rollout — uncommented one pass at a time, in lockstep with the
+  # matching key in ../mirror-base.yml's `platforms:`. See the note there.
+  # darwin/amd64:
+  #   - "^prek-x86_64-apple-darwin\\.tar\\.gz$"
+  # darwin/arm64:
+  #   - "^prek-aarch64-apple-darwin\\.tar\\.gz$"
+  # windows/amd64:
+  #   - "^prek-x86_64-pc-windows-msvc\\.zip$"
+  # windows/arm64:
+  #   - "^prek-aarch64-pc-windows-msvc\\.zip$"
+
+# Archive layout differs between the tarballs and the zips, and `tar tvf` /
+# `unzip -l` on every declared asset of v0.4.10 and v0.4.12 is what decided it:
+#
+#   prek-<triple>.tar.gz  →  prek-<triple>/          (drwxr-xr-x, wrapper dir)
+#                            prek-<triple>/prek      (-rwxr-xr-x, the only file)
+#   prek-<triple>.zip     →  prek.exe                (FLAT — no wrapper at all)
+#
+# So the tarballs strip their one wrapper level and the zips strip nothing;
+# both land the executable at the content root, which is why ONE metadata.json
+# covers all six platforms. Stripping the zips would delete prek.exe outright.
+# The wrapper name embeds the target triple, so keeping it (strip 0 everywhere)
+# would need a different metadata file per platform for no gain.
+#
+# Format probe, before choosing `type: archive` at all: `gzip -dc <asset> |
+# tar tf -` lists entries and `ustar` magic is present at offset 257 of the
+# decompressed stream on every tarball — these are real tarballs, not bare
+# single-file `.gz` (which ocx-mirror cannot read, and which `asset_type:
+# binary` would silently ship still-compressed at 0755).
+asset_type:
+  default:
+    type: archive
+    strip_components: 1
+  # platforms:
+  #   windows/amd64:
+  #     type: archive
+  #     strip_components: 0
+  #   windows/arm64:
+  #     type: archive
+  #     strip_components: 0
+
+# `off`, and it cannot be otherwise here. The scan needs an interface PATH entry
+# of the form ${installPath}/<dir>, and this package has none: the executable
+# sits at the content root on every platform (see the layout note above). Both
+# `auto` and `verify` therefore fail spec load at exit 65 —
+#
+#   bin_scan is enabled but metadata.json declares no interface-visible
+#   ${installPath}/<dir> PATH entry — the verification would inspect no file and
+#   pass green whatever the archive contains.
+#
+# — so `binaries` in metadata.json is hand-maintained, exactly as that error
+# directs. It is short and stable: `prek` is the archive's ONLY entry on every
+# platform, mode 0755 in the tarballs. Quoted so no YAML 1.1 reader folds the
+# bare word into boolean `false`.
+bin_scan: "off"
+
+metadata:
+  default: metadata.json
+
+catalog:
+  logo: logo.svg
+
+versions:
+  # 0.4.10 is the floor: the three releases at or above it (0.4.10, 0.4.11,
+  # 0.4.12) each carry the identical 39-asset set, so every in-range release
+  # resolves all declared platforms and no per-platform min_version/max_version
+  # window is needed. An asset-less release inside the range would be dropped
+  # SILENTLY by the pipeline, which is why the floor is set from a re-listing
+  # rather than from the recon sheet alone.
+  min: "0.4.10"
+  new_per_run: 5
+  poll_interval: "25 */6 * * *"
+
+tests:
+  # `script:` resolves from the REPOSITORY ROOT — unlike `metadata.default` and
+  # `catalog.logo` above, which resolve against this spec's own directory.
+  - name: smoke
+    script: prek/tests/smoke.star
+
+annotations:
+  # From the Phase 1.5 license gate:
+  #   $ gh api repos/j178/prek/license --jq '.license.spdx_id'
+  #   MIT
+  org.opencontainers.image.licenses: "MIT"
+
+announce:
+  # Spelled out, not derived from target.repository — the logical name and the
+  # physical path are related by convention only.
+  package: prek/prek
+  fork: ocx-contrib/index
