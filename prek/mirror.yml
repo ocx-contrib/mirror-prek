@@ -120,10 +120,10 @@ assets:
     - "^prek-x86_64-apple-darwin\\.tar\\.gz$"
   darwin/arm64:
     - "^prek-aarch64-apple-darwin\\.tar\\.gz$"
-  # windows/amd64:
-  #   - "^prek-x86_64-pc-windows-msvc\\.zip$"
-  # windows/arm64:
-  #   - "^prek-aarch64-pc-windows-msvc\\.zip$"
+  windows/amd64:
+    - "^prek-x86_64-pc-windows-msvc\\.zip$"
+  windows/arm64:
+    - "^prek-aarch64-pc-windows-msvc\\.zip$"
 
 # Archive layout differs between the tarballs and the zips, and `tar tvf` /
 # `unzip -l` on every declared asset of v0.4.10 and v0.4.12 is what decided it:
@@ -147,13 +147,13 @@ asset_type:
   default:
     type: archive
     strip_components: 1
-  # platforms:
-  #   windows/amd64:
-  #     type: archive
-  #     strip_components: 0
-  #   windows/arm64:
-  #     type: archive
-  #     strip_components: 0
+  platforms:
+    windows/amd64:
+      type: archive
+      strip_components: 0
+    windows/arm64:
+      type: archive
+      strip_components: 0
 
 # `off`, and it cannot be otherwise here. The scan needs an interface PATH entry
 # of the form ${installPath}/<dir>, and this package has none: the executable
