@@ -116,10 +116,10 @@ assets:
     - "^prek-aarch64-unknown-linux-musl\\.tar\\.gz$"
   # Staged rollout — uncommented one pass at a time, in lockstep with the
   # matching key in ../mirror-base.yml's `platforms:`. See the note there.
-  # darwin/amd64:
-  #   - "^prek-x86_64-apple-darwin\\.tar\\.gz$"
-  # darwin/arm64:
-  #   - "^prek-aarch64-apple-darwin\\.tar\\.gz$"
+  darwin/amd64:
+    - "^prek-x86_64-apple-darwin\\.tar\\.gz$"
+  darwin/arm64:
+    - "^prek-aarch64-apple-darwin\\.tar\\.gz$"
   # windows/amd64:
   #   - "^prek-x86_64-pc-windows-msvc\\.zip$"
   # windows/arm64:

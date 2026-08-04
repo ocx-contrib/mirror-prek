@@ -103,14 +103,14 @@ platforms:
   # container engine, and the key is rejected at spec load. Both ship git
   # preinstalled on every GitHub-hosted image, so nothing to provision.
   #
-  # darwin/amd64:
-  #   # Intel slice tested on the arm64 macos-14 runner via Rosetta 2 —
-  #   # GitHub's native macos-13 Intel pool is exhausted and deadlocks push.
-  #   runner: macos-14
-  #   prefix: ["arch", "-x86_64"]
-  # darwin/arm64:
-  #   runner: macos-14
-  #   shell: bash
+  darwin/amd64:
+    # Intel slice tested on the arm64 macos-14 runner via Rosetta 2 —
+    # GitHub's native macos-13 Intel pool is exhausted and deadlocks push.
+    runner: macos-14
+    prefix: ["arch", "-x86_64"]
+  darwin/arm64:
+    runner: macos-14
+    shell: bash
   #
   # windows/amd64:
   #   runner: windows-latest
