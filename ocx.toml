@@ -2,5 +2,5 @@
 # OCX project toolchain for the mirror-prek sibling repo.
 
 [tools]
-cli = "ocx.sh/ocx/cli:0.5"
-mirror = "ocx.sh/ocx/mirror:0.5"
+cli = "ocx.sh/ocx/cli:0.6"
+mirror = "ocx.sh/ocx/mirror:0.6"
